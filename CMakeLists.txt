@@ -37,7 +37,7 @@ target_compile_options(smb_core PRIVATE ${SMBC_WARNINGS})
 
 # The translated code jumps between labels, many of which are never targeted
 set_source_files_properties(source/SMB/SMB.cpp source/SMB/SMBData.cpp PROPERTIES
-    COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/bigobj,-Wno-unused-label>")
+    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>;$<$<CXX_COMPILER_ID:MSVC>:/wd4102>;$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-unused-label>")
 
 #---------------------------------------------------------------------
 # Game executable
