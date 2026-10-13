@@ -39,9 +39,10 @@ Take a look at [`source/SMB/SMB.cpp`](source/SMB/SMB.cpp) if you're curious.
 ### Features
 
 - **Faithful** — game behavior is verified frame by frame by a regression test.
-- **Crisp at any size** — resizable window and fullscreen. Pixels stay uniform at every scale
-  ("sharp bilinear" scaling), with optional integer-only scaling.
-- **CRT effect** — scanlines and phosphor stripes, rendered at your screen's native resolution.
+- **HD art** — the game's pixel art is redrawn at four times its resolution in real time:
+  clouds, hills, pipes, blocks and characters keep their original look, with clean, smooth edges.
+- **Your choice of look** — press F2 to switch between HD art, sharp square pixels (uniform at
+  every scale) and a CRT effect with scanlines and phosphor stripes. Resizable window and fullscreen.
 - **Authentic sound** — the NES's nonlinear mixer and analog output filters, in 16-bit audio.
 - **Gamepads** — plug-and-play support for one or two controllers.
 - **Quality of life** — pause screen, automatic pause in the background, mute, and volume control.
@@ -94,7 +95,7 @@ whose graphics data it uses. Pass its path on the command line:
 ```
 
 Without an argument, the ROM image is loaded from the path set in the [configuration](#configuration)
-(by default `Super Mario Bros. (JU) (PRG0) [!].nes` in the working directory).
+(by default `Super Mario Bros. (JU) (PRG0) [!].nes`, in the working directory or next to the executable).
 
 On Windows you can also drag the ROM image onto `smbc.exe` in File Explorer. Or put it next to
 `smbc.exe` with the default name above and double-click `smbc.exe`. If the game can't start, a
@@ -116,15 +117,15 @@ The first gamepad controls player 1 (along with the keyboard); a second gamepad 
 | ------------------- | --------------------------------------- |
 | P or Pause          | Pause / resume                          |
 | F11, Alt+Enter or F | Toggle fullscreen                       |
-| F2                  | Toggle the CRT effect                   |
+| F2                  | Switch the look: HD art, pixels or CRT  |
 | M                   | Mute / unmute                           |
 | R                   | Reset (like the console's reset button) |
 | Esc                 | Quit                                    |
 
 ## Configuration
 
-Settings are read from `smbc.conf` in the working directory, an INI file. Every setting is
-optional. For example:
+Settings are read from `smbc.conf`, an INI file in the working directory or next to the
+executable. Every setting is optional. For example:
 
 ```ini
 [audio]
@@ -135,7 +136,7 @@ rom_file = roms/smb.nes
 
 [video]
 scale = 4
-scanlines = 0
+filter = pixel
 ```
 
 | Setting                 | Default                                 | Description |
@@ -144,12 +145,12 @@ scanlines = 0
 | `audio.frequency`       | `48000`                                 | Sample rate in Hz. |
 | `audio.volume`          | `100`                                   | Volume, from 0 to 100. |
 | `game.frame_rate`       | `60`                                    | Frames per second. Higher values speed the game up; with vsync enabled, the display's refresh rate may limit it. |
-| `game.rom_file`         | `Super Mario Bros. (JU) (PRG0) [!].nes` | Path to the ROM image, relative to the working directory or absolute. |
+| `game.rom_file`         | `Super Mario Bros. (JU) (PRG0) [!].nes` | Path to the ROM image: absolute, or relative to the working directory or the executable's folder. |
+| `video.filter`          | `hd`                                    | How the picture is drawn: `hd` (the art redrawn at high resolution), `pixel` (sharp square pixels) or `crt` (scanlines, like an old TV). |
 | `video.fullscreen`      | `0`                                     | Start in fullscreen. |
 | `video.integer_scaling` | `0`                                     | Only enlarge the picture by whole numbers, for perfectly square pixels. |
 | `video.palette_file`    | *(none)*                                | A custom [`.pal` palette file](https://www.nesdev.org/wiki/.pal): 64 RGB triples (192 bytes). 1536-byte files are accepted too; their emphasis variants are ignored, since the game doesn't use them. |
-| `video.scale`           | `3`                                     | Initial window size, as a multiple of 256×240. |
-| `video.scanlines`       | `1`                                     | Enable the CRT effect. |
+| `video.scale`           | `0`                                     | Initial window size, as a multiple of 256×240; `0` makes it as large as fits on the screen. |
 | `video.vsync`           | `1`                                     | Synchronize with the display's refresh rate. |
 
 Booleans accept `1`/`0`, `true`/`false`, `yes`/`no` or `on`/`off`.
@@ -163,7 +164,7 @@ docs/smbdis.asm ──► codegen ──► source/SMB/SMB.cpp, SMBData.cpp   (t
                                          SMBEngine ──► Emulation: PPU (video), APU (audio), controllers
                                              │
                                              ▼
-                                   Frontend (SDL2): window, CRT effect, audio output, input
+                                   Frontend (SDL2): window, HD/CRT filters, audio output, input
 ```
 
 | Directory          | Contents |

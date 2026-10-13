@@ -4,6 +4,7 @@ on:
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
 
 # Cancel superseded runs of the same branch or pull request
 concurrency:

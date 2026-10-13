@@ -73,6 +73,28 @@ bool parse(const std::string& text, std::string& value)
     return true;
 }
 
+bool parse(const std::string& text, VideoFilter& value)
+{
+    const std::string lower = toLower(text);
+    if (lower == "hd")
+    {
+        value = VideoFilter::Hd;
+    }
+    else if (lower == "pixel")
+    {
+        value = VideoFilter::Pixel;
+    }
+    else if (lower == "crt")
+    {
+        value = VideoFilter::Crt;
+    }
+    else
+    {
+        return false;
+    }
+    return true;
+}
+
 using Option = std::function<bool(const std::string&)>;
 
 template <typename T>
@@ -88,12 +110,12 @@ Option bind(int& field, int minimum, int maximum)
 
 } // namespace
 
-Configuration Configuration::load(const std::string& fileName)
+Configuration Configuration::load(const std::filesystem::path& file)
 {
     Configuration config;
 
-    std::ifstream file(fileName);
-    if (!file)
+    std::ifstream stream(file);
+    if (!stream)
     {
         // No configuration file: use the defaults
         return config;
@@ -108,14 +130,25 @@ Configuration Configuration::load(const std::string& fileName)
         {"video.fullscreen", bind(config.fullscreen)},
         {"video.integer_scaling", bind(config.integerScaling)},
         {"video.palette_file", bind(config.paletteFile)},
-        {"video.scale", bind(config.scale, 1, 16)},
-        {"video.scanlines", bind(config.scanlines)},
+        {"video.scale", bind(config.scale, 0, 16)},
+        {"video.filter", bind(config.filter)},
+        {"video.scanlines", [&config](const std::string& text) {
+            // Older setting: the CRT effect on (1) or sharp pixels (0)
+            bool scanlines = false;
+            if (!parse(text, scanlines))
+            {
+                return false;
+            }
+            config.filter = scanlines ? VideoFilter::Crt : VideoFilter::Pixel;
+            return true;
+        }},
         {"video.vsync", bind(config.vsync)},
     };
 
     std::string section;
     std::string line;
-    for (int lineNumber = 1; std::getline(file, line); lineNumber++)
+    const std::string fileName = file.u8string();
+    for (int lineNumber = 1; std::getline(stream, line); lineNumber++)
     {
         line = trim(line);
         if (line.empty() || line[0] == ';' || line[0] == '#')

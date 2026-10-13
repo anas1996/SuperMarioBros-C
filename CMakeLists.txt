@@ -35,6 +35,11 @@ add_library(smb_core STATIC
 target_include_directories(smb_core PUBLIC source)
 target_compile_options(smb_core PRIVATE ${SMBC_WARNINGS})
 
+# std::filesystem is a separate library before GCC 9.1
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.1)
+    target_link_libraries(smb_core PUBLIC stdc++fs)
+endif()
+
 # The translated code jumps between labels, many of which are never targeted
 set_source_files_properties(source/SMB/SMB.cpp source/SMB/SMBData.cpp PROPERTIES
     COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:MSVC>:/bigobj>;$<$<CXX_COMPILER_ID:MSVC>:/wd4102>;$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wno-unused-label>")
@@ -56,11 +61,17 @@ add_executable(smbc
     source/Configuration.cpp
     source/Frontend/AudioOutput.cpp
     source/Frontend/Display.cpp
+    source/Frontend/Files.cpp
     source/Frontend/Input.cpp
+    source/Frontend/Upscaler.cpp
     source/Main.cpp)
 target_link_libraries(smbc PRIVATE smb_core SDL2::SDL2)
 if(TARGET SDL2::SDL2main)
     target_link_libraries(smbc PRIVATE SDL2::SDL2main)
+    if(WIN32)
+        # A windowed application, without a console window next to the game (SDL2main provides WinMain)
+        set_target_properties(smbc PROPERTIES WIN32_EXECUTABLE ON)
+    endif()
 endif()
 target_compile_options(smbc PRIVATE ${SMBC_WARNINGS})
 
@@ -94,6 +105,11 @@ if(SMBC_BUILD_TESTS)
     target_link_libraries(smbc_regression PRIVATE smb_core)
     target_compile_options(smbc_regression PRIVATE ${SMBC_WARNINGS})
     add_test(NAME regression COMMAND smbc_regression)
+
+    add_executable(smbc_upscaler_test tests/UpscalerTest.cpp source/Frontend/Upscaler.cpp)
+    target_include_directories(smbc_upscaler_test PRIVATE source)
+    target_compile_options(smbc_upscaler_test PRIVATE ${SMBC_WARNINGS})
+    add_test(NAME upscaler COMMAND smbc_upscaler_test)
 
     if(TARGET codegen)
         add_test(NAME generated_sources_up_to_date

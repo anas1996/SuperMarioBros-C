@@ -7,8 +7,8 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
-#include <string>
 
 /**
  * RGB colors (0xRRGGBB) of the 64 entries of the NES master palette.
@@ -26,6 +26,6 @@ extern const Palette DEFAULT_PALETTE;
  *
  * @return the palette, or nothing if the file could not be loaded (the reason is logged).
  */
-std::optional<Palette> loadPalette(const std::string& fileName);
+std::optional<Palette> loadPalette(const std::filesystem::path& file);
 
 #endif // PALETTE_HPP

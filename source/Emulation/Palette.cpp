@@ -17,20 +17,19 @@ const Palette DEFAULT_PALETTE = {
     0xf8d878, 0xd8f878, 0xb8f8b8, 0xb8f8d8, 0x00fcfc, 0xf8d8f8, 0x000000, 0x000000
 };
 
-std::optional<Palette> loadPalette(const std::string& fileName)
+std::optional<Palette> loadPalette(const std::filesystem::path& file)
 {
-    // File names are UTF-8, as in the configuration file
-    std::ifstream file(std::filesystem::u8path(fileName), std::ios::binary);
-    if (!file)
+    std::ifstream stream(file, std::ios::binary);
+    if (!stream)
     {
-        std::cerr << "Unable to open palette file \"" << fileName << "\"\n";
+        std::cerr << "Unable to open palette file \"" << file.u8string() << "\"\n";
         return std::nullopt;
     }
 
-    const std::vector<uint8_t> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    const std::vector<uint8_t> data((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
     if (data.size() != 192 && data.size() != 1536)
     {
-        std::cerr << "Unsupported palette file \"" << fileName << "\" (expected 192 or 1536 bytes)\n";
+        std::cerr << "Unsupported palette file \"" << file.u8string() << "\" (expected 192 or 1536 bytes)\n";
         return std::nullopt;
     }
 

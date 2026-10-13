@@ -13,8 +13,15 @@
 
 #include <SDL.h>
 
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #include "Frontend/AudioOutput.hpp"
 #include "Frontend/Display.hpp"
+#include "Frontend/Files.hpp"
 #include "Frontend/Input.hpp"
 #include "SMB/SMBEngine.hpp"
 
@@ -29,19 +36,25 @@ namespace
  *
  * @throws std::runtime_error if the file cannot be read or is not the right ROM image.
  */
-std::vector<uint8_t> loadChr(const std::string& fileName)
+std::vector<uint8_t> loadChr(const std::string& name)
 {
+    const std::filesystem::path path = findFile(name);
+    const std::string shownName = path.empty() ? name : displayName(path);
+
     constexpr std::size_t HEADER_SIZE = 16;
     constexpr std::size_t PRG_SIZE = 2 * 0x4000;
 
-    // File names are UTF-8 (SDL passes command-line arguments as UTF-8 on Windows)
-    std::ifstream file(std::filesystem::u8path(fileName), std::ios::binary);
+    std::ifstream file(path, std::ios::binary);
     if (!file)
     {
-        throw std::runtime_error(
-            "Unable to open the ROM image \"" + fileName + "\".\n\n"
-            "Drop a Super Mario Bros. ROM image onto the game's executable, pass its path as an "
-            "argument, or set game.rom_file in " + CONFIG_FILE_NAME + ".");
+#ifdef _WIN32
+        const char* howTo = "Drop a Super Mario Bros. ROM image onto smbc.exe, put it next to smbc.exe with that "
+                            "name, or set game.rom_file in ";
+#else
+        const char* howTo = "Pass the path of a Super Mario Bros. ROM image as an argument, or set game.rom_file in ";
+#endif
+        throw std::runtime_error("Unable to open the ROM image \"" + shownName + "\".\n\n" + howTo +
+                                 CONFIG_FILE_NAME + ".");
     }
 
     const std::vector<uint8_t> rom((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -50,11 +63,27 @@ std::vector<uint8_t> loadChr(const std::string& fileName)
     if (rom.size() < HEADER_SIZE + PRG_SIZE + SMBEngine::CHR_SIZE ||
         std::memcmp(rom.data(), "NES\x1a", 4) != 0 || rom[4] != 2 || rom[5] != 1)
     {
-        throw std::runtime_error("\"" + fileName + "\" is not a Super Mario Bros. ROM image.");
+        throw std::runtime_error("\"" + shownName + "\" is not a Super Mario Bros. ROM image.");
     }
 
     const auto chr = rom.begin() + HEADER_SIZE + PRG_SIZE;
     return std::vector<uint8_t>(chr, chr + SMBEngine::CHR_SIZE);
+}
+
+/**
+ * On Windows the game is a windowed application without a console of its own. When it is
+ * started from a terminal, print messages there.
+ */
+void attachToParentConsole()
+{
+#ifdef _WIN32
+    if (AttachConsole(ATTACH_PARENT_PROCESS))
+    {
+        FILE* stream = nullptr;
+        freopen_s(&stream, "CONOUT$", "w", stdout);
+        freopen_s(&stream, "CONOUT$", "w", stderr);
+    }
+#endif
 }
 
 /**
@@ -119,7 +148,12 @@ void run(const Configuration& config, const std::vector<uint8_t>& chr)
     SMBEngine engine(chr.data(), audioOpen ? config.audioFrequency : 0, config.frameRate);
     if (!config.paletteFile.empty())
     {
-        if (const auto palette = loadPalette(config.paletteFile))
+        const std::filesystem::path palettePath = findFile(config.paletteFile);
+        if (palettePath.empty())
+        {
+            std::cerr << "Unable to open palette file \"" << config.paletteFile << "\"\n";
+        }
+        else if (const auto palette = loadPalette(palettePath))
         {
             engine.setPalette(*palette);
         }
@@ -171,7 +205,7 @@ void run(const Configuration& config, const std::vector<uint8_t>& chr)
                     display.toggleFullscreen();
                     break;
                 case SDLK_F2:
-                    display.toggleCrtEffect();
+                    display.cycleFilter();
                     break;
                 case SDLK_p:
                 case SDLK_PAUSE:
@@ -226,14 +260,22 @@ void run(const Configuration& config, const std::vector<uint8_t>& chr)
 
 int main(int argc, char* argv[])
 {
-    if (argc > 2 || (argc == 2 && (std::strcmp(argv[1], "-h") == 0 || std::strcmp(argv[1], "--help") == 0)))
+    attachToParentConsole();
+
+    const std::string usage = std::string("Usage: smbc [ROM image]\n\nSettings are read from ") + CONFIG_FILE_NAME +
+                              " in the working directory or next to the executable.";
+    if (argc == 2 && (std::strcmp(argv[1], "-h") == 0 || std::strcmp(argv[1], "--help") == 0))
     {
-        std::cout << "Usage: " << argv[0] << " [ROM image]\n\n"
-                  << "Settings are read from " << CONFIG_FILE_NAME << " in the working directory.\n";
-        return argc > 2 ? 1 : 0;
+        std::cout << usage << "\n";
+        return 0;
+    }
+    if (argc > 2)
+    {
+        showError("Only one ROM image can be opened at a time.\n\n" + usage);
+        return 1;
     }
 
-    Configuration config = Configuration::load(CONFIG_FILE_NAME);
+    Configuration config = Configuration::load(findFile(CONFIG_FILE_NAME));
     if (argc == 2)
     {
         config.romFile = argv[1];
@@ -243,6 +285,10 @@ int main(int argc, char* argv[])
     try
     {
         const std::vector<uint8_t> chr = loadChr(config.romFile);
+
+        // Render at the screen's real resolution, rather than letting Windows enlarge (and blur)
+        // the window when display scaling is above 100% (SDL 2.24 and later; ignored before)
+        SDL_SetHint("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2");
 
         if (SDL_Init(SDL_INIT_VIDEO) < 0)
         {
