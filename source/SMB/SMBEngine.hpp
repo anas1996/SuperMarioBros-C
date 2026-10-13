@@ -6,8 +6,6 @@
 
 #include "../Emulation/MemoryAccess.hpp"
 
-#include "SMBDataPointers.hpp"
-
 class APU;
 class Controller;
 class PPU;
@@ -86,10 +84,6 @@ private:
     uint8_t* chr;                /**< Pointer to CHR data from the ROM. */
     int returnIndexStack[100];   /**< Stack for managing JSR subroutines. */
     int returnIndexStackTop;     /**< Current index of the top of the call stack. */
-
-    // Pointers to constant data used in the decompiled code
-    //
-    SMBDataPointers dataPointers;
 
     /**
      * Run the decompiled code for the game.
