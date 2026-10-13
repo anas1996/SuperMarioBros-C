@@ -19,7 +19,7 @@ Controller& SMBEngine::getController(int player)
     return controllers.at(player);
 }
 
-const std::vector<uint8_t>& SMBEngine::getAudioSamples() const
+const std::vector<int16_t>& SMBEngine::getAudioSamples() const
 {
     return apu->getSamples();
 }

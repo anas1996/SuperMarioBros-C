@@ -36,14 +36,14 @@ struct Checkpoint
 };
 
 const Checkpoint EXPECTED[] = {
-    {1000, 0xaaedbae4df228f13, 0x8862319bf86c65d0},
-    {2000, 0x2c8cac0d4aae0690, 0x6a3c702d8ce7b380},
-    {3000, 0xebefd92c5a1b0357, 0xa038a57f79cea40b},
-    {4000, 0xc13673a0241c456b, 0xd9a682b7b53bf3ce},
-    {5000, 0x4a5670925bc38dfc, 0x1d9d41198afed3fd},
-    {6000, 0x2775da54699e28c1, 0xff12dd41a9bbe523},
-    {7000, 0x051de7e7c8efa211, 0x630df8f4804a0fbc},
-    {8000, 0xb4f85a940a5f555b, 0x3fba4819cebfe85d},
+    {1000, 0xaaedbae4df228f13, 0x7812053e5e105189},
+    {2000, 0x2c8cac0d4aae0690, 0x8fe37b1ca44879d5},
+    {3000, 0xebefd92c5a1b0357, 0xcc568d5935f1193f},
+    {4000, 0xc13673a0241c456b, 0x31cb5580c9effae3},
+    {5000, 0x4a5670925bc38dfc, 0x4d944a2940e76414},
+    {6000, 0x2775da54699e28c1, 0xa0a61ab1f9e5c4db},
+    {7000, 0x051de7e7c8efa211, 0xeea2929c895deed9},
+    {8000, 0xb4f85a940a5f555b, 0xf2abc23e9b3c83b8},
 };
 
 /**
@@ -170,7 +170,11 @@ int main(int argc, char** argv)
         const auto& samples = engine.getAudioSamples();
         state.add(ram.data(), ram.size());
         state.add(frameBuffer.data(), frameBuffer.size() * sizeof(uint32_t));
-        audio.add(samples.data(), samples.size() * sizeof(samples[0]));
+        for (const int16_t sample : samples)
+        {
+            const uint8_t bytes[2] = {static_cast<uint8_t>(sample & 0xff), static_cast<uint8_t>((sample >> 8) & 0xff)};
+            audio.add(bytes, sizeof(bytes));
+        }
 
         if (frame % CHECKPOINT_INTERVAL != 0)
         {

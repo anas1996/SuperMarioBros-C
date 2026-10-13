@@ -54,8 +54,10 @@ endif()
 
 add_executable(smbc
     source/Configuration.cpp
-    source/Main.cpp
-    source/Util/Video.cpp)
+    source/Frontend/AudioOutput.cpp
+    source/Frontend/Display.cpp
+    source/Frontend/Input.cpp
+    source/Main.cpp)
 target_link_libraries(smbc PRIVATE smb_core SDL2::SDL2)
 if(TARGET SDL2::SDL2main)
     target_link_libraries(smbc PRIVATE SDL2::SDL2main)

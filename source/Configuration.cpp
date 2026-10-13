@@ -40,13 +40,13 @@ bool parse(const std::string& text, bool& value)
     return false;
 }
 
-bool parse(const std::string& text, int& value)
+bool parse(const std::string& text, int& value, int minimum, int maximum)
 {
     try
     {
         std::size_t length = 0;
         const int parsed = std::stoi(text, &length);
-        if (length != text.size() || parsed <= 0)
+        if (length != text.size() || parsed < minimum || parsed > maximum)
         {
             return false;
         }
@@ -81,6 +81,11 @@ Option bind(T& field)
     return [&field](const std::string& text) { return parse(text, field); };
 }
 
+Option bind(int& field, int minimum, int maximum)
+{
+    return [&field, minimum, maximum](const std::string& text) { return parse(text, field, minimum, maximum); };
+}
+
 } // namespace
 
 Configuration Configuration::load(const std::string& fileName)
@@ -96,11 +101,14 @@ Configuration Configuration::load(const std::string& fileName)
 
     const std::map<std::string, Option> options = {
         {"audio.enabled", bind(config.audioEnabled)},
-        {"audio.frequency", bind(config.audioFrequency)},
-        {"game.frame_rate", bind(config.frameRate)},
+        {"audio.frequency", bind(config.audioFrequency, 8000, 192000)},
+        {"audio.volume", bind(config.audioVolume, 0, 100)},
+        {"game.frame_rate", bind(config.frameRate, 1, 1000)},
         {"game.rom_file", bind(config.romFile)},
+        {"video.fullscreen", bind(config.fullscreen)},
+        {"video.integer_scaling", bind(config.integerScaling)},
         {"video.palette_file", bind(config.paletteFile)},
-        {"video.scale", bind(config.scale)},
+        {"video.scale", bind(config.scale, 1, 16)},
         {"video.scanlines", bind(config.scanlines)},
         {"video.vsync", bind(config.vsync)},
     };

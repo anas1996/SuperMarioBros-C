@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "APU.hpp"
@@ -30,6 +32,44 @@ const uint16_t noiseTable[] = {
  * Number of channel timer steps per quarter frame.
  */
 constexpr int STEPS_PER_QUARTER_FRAME = 3729;
+
+/**
+ * Audio is processed in fixed point, with 1.0 represented by this value, so that the
+ * output is identical on every platform.
+ */
+constexpr int FIXED_ONE = 1 << 16;
+
+/**
+ * The NES mixes its channels nonlinearly. These tables approximate the mixer's output
+ * (as a fraction of FIXED_ONE) for the sum of the pulse channels, and for the weighted
+ * sum 3 * triangle + 2 * noise (+ DMC, which Super Mario Bros. does not use).
+ * See https://www.nesdev.org/wiki/APU_Mixer
+ */
+struct MixerTables
+{
+    std::array<int, 31> pulse{};
+    std::array<int, 203> tnd{};
+
+    MixerTables()
+    {
+        for (std::size_t n = 1; n < pulse.size(); n++)
+        {
+            pulse[n] = static_cast<int>(std::lround(FIXED_ONE * 95.52 / (8128.0 / n + 100.0)));
+        }
+        for (std::size_t n = 1; n < tnd.size(); n++)
+        {
+            tnd[n] = static_cast<int>(std::lround(FIXED_ONE * 163.67 / (24329.0 / n + 100.0)));
+        }
+    }
+};
+
+const MixerTables mixer;
+
+/**
+ * Converts a fixed-point sample to signed 16 bits, with headroom for the loudest passages.
+ */
+constexpr int OUTPUT_GAIN_NUMERATOR = 7;
+constexpr int OUTPUT_GAIN_DENOMINATOR = 4;
 
 /**
  * Silences a channel after a number of quarter frames.
@@ -108,6 +148,65 @@ struct Envelope
 };
 
 } // namespace
+
+/**
+ * The analog output stage of the NES: two first-order high-pass filters (90 Hz and 440 Hz),
+ * which also remove the DC offset of the mixer output, and a first-order low-pass filter (14 kHz).
+ */
+class OutputFilter
+{
+public:
+    explicit OutputFilter(int sampleRate) :
+        highPass90(highPassCoefficient(90.0, sampleRate)),
+        highPass440(highPassCoefficient(440.0, sampleRate)),
+        lowPass14k(lowPassCoefficient(14000.0, sampleRate))
+    {
+    }
+
+    /**
+     * Filter a mixer output sample (fixed point) and convert it to 16 bits.
+     */
+    int16_t process(int input)
+    {
+        const int64_t stage1 = highPass(input, highPass90, input1, output1);
+        const int64_t stage2 = highPass(stage1, highPass440, input2, output2);
+        output3 += (lowPass14k * (stage2 - output3)) / FIXED_ONE;
+
+        const int64_t sample = output3 * 32767 * OUTPUT_GAIN_NUMERATOR / (int64_t{FIXED_ONE} * OUTPUT_GAIN_DENOMINATOR);
+        return static_cast<int16_t>(std::clamp<int64_t>(sample, -32768, 32767));
+    }
+
+private:
+    int64_t highPass90;
+    int64_t highPass440;
+    int64_t lowPass14k;
+    int64_t input1 = 0;
+    int64_t output1 = 0;
+    int64_t input2 = 0;
+    int64_t output2 = 0;
+    int64_t output3 = 0;
+
+    static constexpr double PI = 3.14159265358979323846;
+
+    static int64_t highPassCoefficient(double cutoff, int sampleRate)
+    {
+        // RC / (RC + dt)
+        return std::lround(FIXED_ONE / (1.0 + 2.0 * PI * cutoff / sampleRate));
+    }
+
+    static int64_t lowPassCoefficient(double cutoff, int sampleRate)
+    {
+        // dt / (RC + dt)
+        return std::lround(FIXED_ONE / (1.0 + sampleRate / (2.0 * PI * cutoff)));
+    }
+
+    static int64_t highPass(int64_t input, int64_t coefficient, int64_t& previousInput, int64_t& previousOutput)
+    {
+        previousOutput = (coefficient * (previousOutput + input - previousInput)) / FIXED_ONE;
+        previousInput = input;
+        return previousOutput;
+    }
+};
 
 /**
  * Pulse waveform generator.
@@ -381,23 +480,22 @@ APU::APU(int sampleRate, int frameRate) :
     pulse1(std::make_unique<Pulse>(1)),
     pulse2(std::make_unique<Pulse>(2)),
     triangle(std::make_unique<Triangle>()),
-    noise(std::make_unique<Noise>())
+    noise(std::make_unique<Noise>()),
+    filter(std::make_unique<OutputFilter>(sampleRate))
 {
 }
 
 APU::~APU() = default;
 
-const std::vector<uint8_t>& APU::getSamples() const
+const std::vector<int16_t>& APU::getSamples() const
 {
     return samples;
 }
 
-uint8_t APU::getOutput() const
+int APU::getOutput() const
 {
-    const double pulseOut = 0.00752 * (pulse1->output() + pulse2->output());
-    const double tndOut = 0.00851 * triangle->output() + 0.00494 * noise->output();
-
-    return static_cast<uint8_t>(std::floor(255.0 * (pulseOut + tndOut)));
+    return mixer.pulse[pulse1->output() + pulse2->output()] +
+           mixer.tnd[3 * triangle->output() + 2 * noise->output()];
 }
 
 void APU::stepFrame()
@@ -426,27 +524,37 @@ void APU::stepFrame()
         // with the remainder going to the last quarter
         const int samplesPerFrame = sampleRate / frameRate;
         const int samplesPerQuarter = sampleRate / (frameRate * 4);
-        const int samplesToWrite = (quarter == 3) ? samplesPerFrame - 3 * samplesPerQuarter : samplesPerQuarter;
+        const int64_t samplesToWrite = (quarter == 3) ? samplesPerFrame - 3 * samplesPerQuarter : samplesPerQuarter;
 
-        int written = 0;
-        for (int step = 0; step < STEPS_PER_QUARTER_FRAME; step++)
+        // Each sample is the average output over the timer steps it covers (a box filter),
+        // which suppresses the aliasing of simply picking one step per sample
+        int64_t sum = 0;
+        int count = 0;
+        int average = 0;
+        int64_t written = 0;
+        for (int64_t step = 1; step <= STEPS_PER_QUARTER_FRAME; step++)
         {
-            if (written < samplesToWrite &&
-                (step / static_cast<double>(STEPS_PER_QUARTER_FRAME)) > (written / static_cast<double>(samplesToWrite)))
-            {
-                samples.push_back(getOutput());
-                written++;
-            }
-
             pulse1->stepTimer();
             pulse2->stepTimer();
             noise->stepTimer();
             triangle->stepTimer();
             triangle->stepTimer();
-        }
 
-        // Pad if the sample rate exceeds the rate at which the channels are stepped
-        samples.resize(samples.size() + (samplesToWrite - written), samples.empty() ? 0 : samples.back());
+            sum += getOutput();
+            count++;
+
+            while (written < samplesToWrite && step * samplesToWrite >= (written + 1) * STEPS_PER_QUARTER_FRAME)
+            {
+                if (count > 0)
+                {
+                    average = static_cast<int>(sum / count);
+                    sum = 0;
+                    count = 0;
+                }
+                samples.push_back(filter->process(average));
+                written++;
+            }
+        }
     }
 }
 
