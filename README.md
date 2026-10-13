@@ -96,6 +96,10 @@ whose graphics data it uses. Pass its path on the command line:
 Without an argument, the ROM image is loaded from the path set in the [configuration](#configuration)
 (by default `Super Mario Bros. (JU) (PRG0) [!].nes` in the working directory).
 
+On Windows you can also drag the ROM image onto `smbc.exe` in File Explorer. Or put it next to
+`smbc.exe` with the default name above and double-click `smbc.exe`. If the game can't start, a
+message box explains why.
+
 ## Controls
 
 | NES controller | Keyboard   | Gamepad                     |

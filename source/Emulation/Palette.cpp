@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -18,7 +19,8 @@ const Palette DEFAULT_PALETTE = {
 
 std::optional<Palette> loadPalette(const std::string& fileName)
 {
-    std::ifstream file(fileName, std::ios::binary);
+    // File names are UTF-8, as in the configuration file
+    std::ifstream file(std::filesystem::u8path(fileName), std::ios::binary);
     if (!file)
     {
         std::cerr << "Unable to open palette file \"" << fileName << "\"\n";

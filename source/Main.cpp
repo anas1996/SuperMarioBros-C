@@ -3,10 +3,12 @@
  * @brief Entry point: loads the ROM image and runs the game.
  */
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
 #include <SDL.h>
@@ -24,19 +26,22 @@ namespace
 
 /**
  * Load the graphics (CHR) data from a Super Mario Bros. ROM image.
+ *
+ * @throws std::runtime_error if the file cannot be read or is not the right ROM image.
  */
-std::optional<std::vector<uint8_t>> loadChr(const std::string& fileName)
+std::vector<uint8_t> loadChr(const std::string& fileName)
 {
     constexpr std::size_t HEADER_SIZE = 16;
     constexpr std::size_t PRG_SIZE = 2 * 0x4000;
 
-    std::ifstream file(fileName, std::ios::binary);
+    // File names are UTF-8 (SDL passes command-line arguments as UTF-8 on Windows)
+    std::ifstream file(std::filesystem::u8path(fileName), std::ios::binary);
     if (!file)
     {
-        std::cerr << "Unable to open the ROM image \"" << fileName << "\".\n"
-                  << "Pass the path of a Super Mario Bros. ROM image as an argument, or set "
-                  << "game.rom_file in " << CONFIG_FILE_NAME << ".\n";
-        return std::nullopt;
+        throw std::runtime_error(
+            "Unable to open the ROM image \"" + fileName + "\".\n\n"
+            "Drop a Super Mario Bros. ROM image onto the game's executable, pass its path as an "
+            "argument, or set game.rom_file in " + CONFIG_FILE_NAME + ".");
     }
 
     const std::vector<uint8_t> rom((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -45,12 +50,21 @@ std::optional<std::vector<uint8_t>> loadChr(const std::string& fileName)
     if (rom.size() < HEADER_SIZE + PRG_SIZE + SMBEngine::CHR_SIZE ||
         std::memcmp(rom.data(), "NES\x1a", 4) != 0 || rom[4] != 2 || rom[5] != 1)
     {
-        std::cerr << "\"" << fileName << "\" is not a Super Mario Bros. ROM image.\n";
-        return std::nullopt;
+        throw std::runtime_error("\"" + fileName + "\" is not a Super Mario Bros. ROM image.");
     }
 
     const auto chr = rom.begin() + HEADER_SIZE + PRG_SIZE;
     return std::vector<uint8_t>(chr, chr + SMBEngine::CHR_SIZE);
+}
+
+/**
+ * Report an error that stops the game. It is also shown in a message box, since the console
+ * is not visible (or closes immediately) when the game is started from a file manager.
+ */
+void showError(const std::string& message)
+{
+    std::cerr << message << "\n";
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, APP_TITLE, message.c_str(), nullptr);
 }
 
 /**
@@ -225,30 +239,25 @@ int main(int argc, char* argv[])
         config.romFile = argv[1];
     }
 
-    const auto chr = loadChr(config.romFile);
-    if (!chr)
-    {
-        return 1;
-    }
-
-    if (SDL_Init(SDL_INIT_VIDEO) < 0)
-    {
-        std::cerr << "SDL_Init() failed: " << SDL_GetError() << "\n";
-        return 1;
-    }
-    if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) < 0)
-    {
-        std::cerr << "Gamepads are unavailable: " << SDL_GetError() << "\n";
-    }
-
     int result = 0;
     try
     {
-        run(config, *chr);
+        const std::vector<uint8_t> chr = loadChr(config.romFile);
+
+        if (SDL_Init(SDL_INIT_VIDEO) < 0)
+        {
+            throw SdlError("SDL_Init()");
+        }
+        if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) < 0)
+        {
+            std::cerr << "Gamepads are unavailable: " << SDL_GetError() << "\n";
+        }
+
+        run(config, chr);
     }
     catch (const std::exception& error)
     {
-        std::cerr << error.what() << "\n";
+        showError(error.what());
         result = 1;
     }
 
