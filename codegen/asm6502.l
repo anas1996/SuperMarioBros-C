@@ -1,4 +1,4 @@
-%option noyywrap nounput noinput yylineno
+%option noyywrap nounput noinput nounistd never-interactive yylineno
 
 %{
 #include <cstdio>

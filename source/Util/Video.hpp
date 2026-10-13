@@ -5,7 +5,7 @@
 #ifndef VIDEO_HPP
 #define VIDEO_HPP
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 /**
  * Generate a texture for a scanline overlay effect.

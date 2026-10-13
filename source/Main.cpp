@@ -4,7 +4,7 @@
 #include <optional>
 #include <vector>
 
-#include <SDL2/SDL.h>
+#include <SDL.h>
 
 #include "Emulation/Controller.hpp"
 #include "SMB/SMBEngine.hpp"
@@ -221,7 +221,7 @@ static void mainLoop(const Configuration& config, const std::vector<uint8_t>& ro
     }
 }
 
-int main(int argc, char** argv)
+int main(int, char**)
 {
     const Configuration config = Configuration::load(CONFIG_FILE_NAME);
 
