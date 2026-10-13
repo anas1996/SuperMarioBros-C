@@ -61,7 +61,7 @@ Take a look at [`source/SMB/SMB.cpp`](source/SMB/SMB.cpp) if you're curious.
 | Fedora        | `sudo dnf install gcc-c++ cmake SDL2-devel`                                   |
 | Arch          | `sudo pacman -S base-devel cmake sdl2`                                        |
 | macOS         | `brew install cmake sdl2`                                                     |
-| Windows       | [vcpkg](https://vcpkg.io) installs SDL2 from `vcpkg.json` (see below)          |
+| Windows       | Visual Studio 2022 with C++; its vcpkg installs SDL2 (see below)              |
 
 ### Building
 
@@ -70,12 +70,17 @@ cmake -B build
 cmake --build build --parallel
 ```
 
-On Windows, pass vcpkg's toolchain file and build the Release configuration:
+On Windows, install Visual Studio 2022 (or its Build Tools) with the "Desktop development with C++"
+workload, which includes CMake and vcpkg. Then, from a **Developer Command Prompt for VS 2022**,
+build the Release configuration using vcpkg's toolchain file, which installs SDL2:
 
-```sh
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=<vcpkg root>/scripts/buildsystems/vcpkg.cmake
+```bat
+cmake -B build -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake"
 cmake --build build --config Release
 ```
+
+In a Developer PowerShell, write `$env:VCPKG_ROOT` instead of `%VCPKG_ROOT%`. With a separate
+vcpkg installation, use the path of its `scripts/buildsystems/vcpkg.cmake`.
 
 This produces the `smbc` executable in `build/` (`build/Release/` on Windows).
 
